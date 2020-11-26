@@ -80,14 +80,31 @@ public class LongAdder extends Striped64 implements Serializable {
      * Adds the given value.
      *
      * @param x the value to add
+     *
+     *
+     * 如果cells数组为空，则尝试直接cas操作base，操作成功则直接返回，操作失败则需要创建cells数组
+     *
+     * 如果cells数组不为空，且当前线程对应的cell元素不为空，则直接cas操作该cell，成功则直接返回，
+     *
      */
     public void add(long x) {
         Cell[] as; long b, v; int m; Cell a;
         if ((as = cells) != null || !casBase(b = base, b + x)) {
+
+            // cells不为空 或者 base中cas操作失败（进行base中cas操作的前提是cells为空）
+
+            // uncontended是否存在竞争,true：没有触发过竞争
             boolean uncontended = true;
+
             if (as == null || (m = as.length - 1) < 0 ||
                 (a = as[getProbe() & m]) == null ||
                 !(uncontended = a.cas(v = a.value, v + x)))
+
+                // 条件1：cells为空 （说明是base中cas操作失败进来的）
+                // 条件2：当前线程对应的cell值为空
+                // 条件3：当前线程对应的cell进行cas操作失败
+
+                // uncontend在条件3时为false,表示触发过竞争
                 longAccumulate(x, null, uncontended);
         }
     }

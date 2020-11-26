@@ -136,6 +136,58 @@ public class CopyOnWriteArrayList<E>
         else {
             elements = c.toArray();
             // c.toArray might (incorrectly) not return Object[] (see 6260652)
+            // 有可能c.toArray返回的不是Object[]类型，有可能是具体的类型，例如java.util.Arrays$ArrayList的toArray方法返回的就是泛型类型的数组
+            // 如果不将其转换为Object[] 类型，那么在接下来添加元素时可能会出现异常
+            /**
+             * public static void test1()
+             *     {
+             *         SubClass[] subArray = {new SubClass(), new SubClass()};
+             *         System.out.println(subArray.getClass());
+             *
+             *         // class [Lcollection.SubClass;
+             *         BaseClass[] baseArray = subArray;
+             *         System.out.println(baseArray.getClass());
+             *
+             *         // java.lang.ArrayStoreException
+             *         baseArray[0] = new BaseClass();
+             *     }
+             *
+             *     public static void test2()
+             *     {
+             *         List<String> list = Arrays.asList("abc");
+             *
+             *         // class java.util.Arrays$ArrayList
+             *         System.out.println(list.getClass());
+             *
+             *         // class [Ljava.lang.String;
+             *         Object[] objArray = list.toArray();
+             *         System.out.println(objArray.getClass());
+             *
+             *         objArray[0] = new Object(); // cause ArrayStoreException
+             *     }
+             *
+             *     public static void test3()
+             *     {
+             *         List<String> dataList = new ArrayList<>();
+             *         dataList.add("one");
+             *         dataList.add("two");
+             *
+             *         Object[] listToArray = dataList.toArray();
+             *
+             *         // class [Ljava.lang.Object;返回的是Object数组
+             *         System.out.println(listToArray.getClass());
+             *         listToArray[0] = "";
+             *         listToArray[0] = 123;
+             *         listToArray[0] = new Object();
+             *
+             *     }
+             *
+             *     private static class SubClass extends BaseClass{
+             *     }
+             *
+             *     private static class BaseClass {
+             *     }
+             */
             if (elements.getClass() != Object[].class)
                 elements = Arrays.copyOf(elements, elements.length, Object[].class);
         }
@@ -394,6 +446,9 @@ public class CopyOnWriteArrayList<E>
      * @throws IndexOutOfBoundsException {@inheritDoc}
      */
     public E get(int index) {
+        // get操作其实是分两步走的：1.获取array数组；2.从获取的array数组中获取index下标位置的元素。
+        // 可能会存在第一步与第二部之间，array数组被别的线程修改的情况，这样当前线程拿到的数据可能就不准确了(不是最新的数据)
+        // 这个就是copyonwriteArraylist的弱一致性问题
         return get(getArray(), index);
     }
 
@@ -437,8 +492,12 @@ public class CopyOnWriteArrayList<E>
         try {
             Object[] elements = getArray();
             int len = elements.length;
+            // 创建新的数组，长度为旧数组的长度+1，并将旧数组的值复制到新数组中
             Object[] newElements = Arrays.copyOf(elements, len + 1);
+            // 在新的数组上添加新值
             newElements[len] = e;
+
+            // 用新数组替换array属性
             setArray(newElements);
             return true;
         } finally {
@@ -1075,6 +1134,12 @@ public class CopyOnWriteArrayList<E>
      * @return an iterator over the elements in this list in proper sequence
      */
     public Iterator<E> iterator() {
+        // 返回的实际上是一个COWIterator对象,COWIterator对象中的snapshot变量保存了当前list的内容,cursor是遍历list时数据的下标
+        /**
+         * 思考：为什么说snapshot是list的快照呢?明明是指针传递的引用啊,而不是副本。 如果在该线程使用返回的法代器遍历元素的过程中, 其他线程没有对list进行增删改,那么
+         * snapshot本身就是list的array, 因为它们是引用关系。但是如果在遍历期间其他线程对该list进行了增删改,那么snapshot就是快照了,因为增删改后list里面的数组被新数组替换了 ,
+         * 这时候老数组被snapshot引用.这也说明获取迭代器后, 使用该法代器元素时,其他线程对该 list 进行的增删改不可见,因为它 们 操作的是两个不同的数组 , 这就是弱一致性 。
+         */
         return new COWIterator<E>(getArray(), 0);
     }
 

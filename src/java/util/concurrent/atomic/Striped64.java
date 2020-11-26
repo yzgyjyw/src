@@ -213,17 +213,29 @@ abstract class Striped64 extends Number {
      */
     final void longAccumulate(long x, LongBinaryOperator fn,
                               boolean wasUncontended) {
+        // 记录当前线程的probe值
         int h;
         if ((h = getProbe()) == 0) {
+            // 当前线程的probe值为0，还未初始化
+
+            // 初始化当前线程的probe值
             ThreadLocalRandom.current(); // force initialization
+
             h = getProbe();
+
+            // 由于当前线程的probe之前还未初始化，导致之前获取的都是cells数组中的0号元素。与此同时所有位初始化probe值的线程都对0号cell进行操作，容易造成竞争，这边排除这个影响
             wasUncontended = true;
         }
+        // 对cells数组扩容的意向，false：一定不会扩容cells；true：可能会扩容cells，如果设置为true后下一次针对cell的cas操作依旧不成功则会触发扩容，但是不一定
         boolean collide = false;                // True if last slot nonempty
         for (;;) {
             Cell[] as; Cell a; int n; long v;
+
+            //CASE1：cells不为空，有两种情况：1.当前线程对应的cell元素为空；2.针对当前线程的cell元素执行cas操作失败；
             if ((as = cells) != null && (n = as.length) > 0) {
+                //CASE1.1： 当前线程对应的cell为空
                 if ((a = as[(n - 1) & h]) == null) {
+                    // 使用x值初始化当前线程对应的cell元素，初始化成功则返回，否则重新执行for循环
                     if (cellsBusy == 0) {       // Try to attach new Cell
                         Cell r = new Cell(x);   // Optimistically create
                         if (cellsBusy == 0 && casCellsBusy()) {
@@ -246,15 +258,33 @@ abstract class Striped64 extends Number {
                     }
                     collide = false;
                 }
+                //CASE1.2 当前线程对应的cell不是空且发生过竞争
                 else if (!wasUncontended)       // CAS already known to fail
                     wasUncontended = true;      // Continue after rehash
+                /**
+                 * 判断总共需要执行多少次针对cell的失败会进行扩容？
+                 * 1. LongAdder.add方法执行一次
+                 *
+                 * 2. CASE1.2 满足后会进行一次rehash重新设置probe值，下一次循环时会执行一次CASE1.3
+                 *
+                 * 3. CASE1.3 的结果为false，执行到CASE1.4 设置collide为true，后会进行一次rehash重新设置probe值，下一次循环时又会执行一次CASE1.3
+                 *
+                 * 4. CASE1.3 的结果为false，此刻collide为true，执行扩容操作
+                 *
+                 * 如果cell存在的情况下最多执行3次cell操作就会执行一次扩容
+                 */
+
+                //CASE1.3 当前线程对应的cell不是空且未发生过竞争，针对当前线程对应的cell元素执行cas操作，成功则返回
                 else if (a.cas(v = a.value, ((fn == null) ? v + x :
                                              fn.applyAsLong(v, x))))
                     break;
+                // 当前线程没有在该cell元素上发生过竞争，但是cas失败了，cells数组的长度大于NCPU，或者cells已经被扩容
                 else if (n >= NCPU || cells != as)
                     collide = false;            // At max size or stale
+                // 没有扩容意向
                 else if (!collide)
                     collide = true;
+                // 获取到锁，则扩容
                 else if (cellsBusy == 0 && casCellsBusy()) {
                     try {
                         if (cells == as) {      // Expand table unless stale
@@ -269,8 +299,11 @@ abstract class Striped64 extends Number {
                     collide = false;
                     continue;                   // Retry with expanded table
                 }
+                // 重新设置线程的probe值
                 h = advanceProbe(h);
             }
+
+            //CASE2： cells为空且当前没有其它线程在操作cells数组，说明之前都是通过对base进行cas操作进行add的，此时需要初始化cells，初始化成功则结束流程
             else if (cellsBusy == 0 && cells == as && casCellsBusy()) {
                 boolean init = false;
                 try {                           // Initialize table
@@ -286,6 +319,8 @@ abstract class Striped64 extends Number {
                 if (init)
                     break;
             }
+
+            //CASE3： cells为空，但是有其它线程在初始化cells数组，那么当前线程继续尝试对base进行cas操作
             else if (casBase(v = base, ((fn == null) ? v + x :
                                         fn.applyAsLong(v, x))))
                 break;                          // Fall back on using base
