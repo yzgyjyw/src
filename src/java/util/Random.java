@@ -200,8 +200,11 @@ class Random implements java.io.Serializable {
         AtomicLong seed = this.seed;
         do {
             oldseed = seed.get();
+            // 根据老的种子生成新的种子
             nextseed = (oldseed * multiplier + addend) & mask;
+            // 如果多个线程之间获取随机数竞争比较激烈，会影响性能
         } while (!seed.compareAndSet(oldseed, nextseed));
+        // 根据新的种子生成随机数
         return (int)(nextseed >>> (48 - bits));
     }
 

@@ -213,7 +213,7 @@ abstract class Striped64 extends Number {
      */
     final void longAccumulate(long x, LongBinaryOperator fn,
                               boolean wasUncontended) {
-        // 记录当前线程的probe值
+        // 记录当前线程的probe值,可以理解成线程的hash值
         int h;
         if ((h = getProbe()) == 0) {
             // 当前线程的probe值为0，还未初始化
@@ -223,10 +223,12 @@ abstract class Striped64 extends Number {
 
             h = getProbe();
 
-            // 由于当前线程的probe之前还未初始化，导致之前获取的都是cells数组中的0号元素。与此同时所有位初始化probe值的线程都对0号cell进行操作，容易造成竞争，这边排除这个影响
+            // 由于当前线程的probe之前还未初始化，导致之前获取的都是cells数组中的0号元素
+            // 与此同时所有位初始化probe值的线程都对0号cell进行操作，容易造成竞争，这边排除这个影响
             wasUncontended = true;
         }
-        // 对cells数组扩容的意向，false：一定不会扩容cells；true：可能会扩容cells，如果设置为true后下一次针对cell的cas操作依旧不成功则会触发扩容，但是不一定
+        // 对cells数组扩容的意向
+        // false：一定不会扩容cells；true：可能会扩容cells，如果设置为true后下一次针对cell的cas操作依旧不成功则会触发扩容，但是不一定
         boolean collide = false;                // True if last slot nonempty
         for (;;) {
             Cell[] as; Cell a; int n; long v;

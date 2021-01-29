@@ -45,6 +45,9 @@ import java.lang.ref.*;
  * @since   1.2
  */
 
+/**
+ * InheritableThreadLocal继承自ThreadLocal,重写了getMap方法，createMap方法
+ */
 public class InheritableThreadLocal<T> extends ThreadLocal<T> {
     /**
      * Computes the child's initial value for this inheritable thread-local
@@ -67,6 +70,7 @@ public class InheritableThreadLocal<T> extends ThreadLocal<T> {
      *
      * @param t the current thread
      */
+    // 返回的是线程的属性inheritableThreadLocals
     ThreadLocalMap getMap(Thread t) {
        return t.inheritableThreadLocals;
     }

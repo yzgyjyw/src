@@ -415,6 +415,8 @@ class Thread implements Runnable {
                 acc != null ? acc : AccessController.getContext();
         this.target = target;
         setPriority(priority);
+        // inheritThreadLocals默认为true
+        // 如果parent.inheritableThreadLocals不为null,会使用其初始化子线程的inheritableThreadLocals
         if (inheritThreadLocals && parent.inheritableThreadLocals != null)
             this.inheritableThreadLocals =
                 ThreadLocal.createInheritedMap(parent.inheritableThreadLocals);

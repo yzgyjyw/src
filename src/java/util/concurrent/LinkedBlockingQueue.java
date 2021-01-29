@@ -206,9 +206,10 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      *
      * @return the node
      */
-    private E dequeue() {
+    private E    dequeue() {
         // assert takeLock.isHeldByCurrentThread();
         // assert head.item == null;
+        // LinkedBlockingQueue中头节点永远存在,头结点的item为null
         Node<E> h = head;
         Node<E> first = h.next;
         h.next = h; // help GC
@@ -328,6 +329,10 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      * @throws InterruptedException {@inheritDoc}
      * @throws NullPointerException {@inheritDoc}
      */
+    /*
+    * put在发现当前链表的长度达到最大值则会继续等待队列不满
+    * 与offer不一样的还有，put在阻塞时,如果有被的线程设置了中断标识,会响应中断抛出异常
+    * */
     public void put(E e) throws InterruptedException {
         if (e == null) throw new NullPointerException();
         // Note: convention in all put/take/etc is to preset local var
@@ -346,6 +351,7 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
              * signalled if it ever changes from capacity. Similarly
              * for all other uses of count in other wait guards.
              */
+            // put在发现当前链表的长度达到最大值则会继续等待队列不满
             while (count.get() == capacity) {
                 notFull.await();
             }
@@ -408,24 +414,31 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
      * @throws NullPointerException if the specified element is null
      */
     public boolean offer(E e) {
+        // 1. LinkedBlockingQueue不能添加null元素
         if (e == null) throw new NullPointerException();
+        // 2. 检查当前长度
         final AtomicInteger count = this.count;
         if (count.get() == capacity)
             return false;
         int c = -1;
         Node<E> node = new Node<E>(e);
+        //3. 阻塞式的获取put锁
         final ReentrantLock putLock = this.putLock;
         putLock.lock();
         try {
+            // 4. 再次检查链表长度
             if (count.get() < capacity) {
+                //5. 节点入队,last = last.next = node;
                 enqueue(node);
                 c = count.getAndIncrement();
+                //6. 如果还可以再添加元素,唤醒其它需要添加元素的线程
                 if (c + 1 < capacity)
                     notFull.signal();
             }
         } finally {
             putLock.unlock();
         }
+        //7. c==0说明,在put元素之前,链表中没有元素,此时添加了元素需要唤醒正在等待获取元素的线程
         if (c == 0)
             signalNotEmpty();
         return c >= 0;
@@ -468,11 +481,13 @@ public class LinkedBlockingQueue<E> extends AbstractQueue<E>
             }
             x = dequeue();
             c = count.getAndDecrement();
+            // 链表中还有元素,唤醒其它在获取元素的线程
             if (c > 1)
                 notEmpty.signal();
         } finally {
             takeLock.unlock();
         }
+        // c==capacity说明poll之前队列是满的,此时poll出一个元素后需要唤醒其它put线程
         if (c == capacity)
             signalNotFull();
         return x;

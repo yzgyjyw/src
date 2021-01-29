@@ -349,6 +349,7 @@ public class ConcurrentLinkedQueue<E> extends AbstractQueue<E>
                 p = (t != (t = tail)) ? t : head;
             else
                 // Check for tail updates after two hops.
+                // p != t && t != (t = tail)    发现tail属性被修改后直接跳到令p=tail
                 p = (p != t && t != (t = tail)) ? t : q;
         }
     }

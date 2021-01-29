@@ -597,18 +597,24 @@ public class CopyOnWriteArrayList<E>
         try {
             Object[] current = getArray();
             int len = current.length;
+            // 说明数组已经改变过,有别的线程修改过
             if (snapshot != current) findIndex: {
                 int prefix = Math.min(index, len);
+                // 在新数组中找出要删除对象所在的位置
                 for (int i = 0; i < prefix; i++) {
                     if (current[i] != snapshot[i] && eq(o, current[i])) {
                         index = i;
                         break findIndex;
                     }
                 }
+                // index >= len 说明array数组做过删除操作了,并且在上面的for循环中在新的array数组中没有找到对应的要删除的元素
                 if (index >= len)
                     return false;
+
                 if (current[index] == o)
                     break findIndex;
+
+
                 index = indexOf(o, current, index, len);
                 if (index < 0)
                     return false;

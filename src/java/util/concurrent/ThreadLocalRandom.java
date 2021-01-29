@@ -217,6 +217,8 @@ public class ThreadLocalRandom extends Random {
      *
      * @return the current thread's {@code ThreadLocalRandom}
      */
+    // 该方法返回的是相同的ThreadLocalRandom对象，这个对象只是一个工具类
+    // 每个线程不一样的是随机数的种子，该值保存在Thread对象中的threadLocalRandomSeed
     public static ThreadLocalRandom current() {
         if (UNSAFE.getInt(Thread.currentThread(), PROBE) == 0)
             localInit();
