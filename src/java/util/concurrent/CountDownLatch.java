@@ -181,6 +181,7 @@ public class CountDownLatch {
                     return false;
                 int nextc = c-1;
                 if (compareAndSetState(c, nextc))
+                    // 为0时返回true,此时会执行doReleaseShared方法,释放等待队列中的线程,否则返回false
                     return nextc == 0;
             }
         }
@@ -197,6 +198,7 @@ public class CountDownLatch {
      */
     public CountDownLatch(int count) {
         if (count < 0) throw new IllegalArgumentException("count < 0");
+        // 创建一个同步器
         this.sync = new Sync(count);
     }
 
@@ -228,6 +230,7 @@ public class CountDownLatch {
      *         while waiting
      */
     public void await() throws InterruptedException {
+        // await就是获取资源
         sync.acquireSharedInterruptibly(1);
     }
 
@@ -288,6 +291,7 @@ public class CountDownLatch {
      * <p>If the current count equals zero then nothing happens.
      */
     public void countDown() {
+        // countDown对应就是释放一个资源
         sync.releaseShared(1);
     }
 
